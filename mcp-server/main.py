@@ -1,7 +1,16 @@
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
+from fastmcp.utilities.types import Image
 import requests
+import os
+from pathlib import Path
 from typing import Optional, Dict, Literal
+from google import genai
+from dotenv import load_dotenv
+
+# Load .env file from the mcp-server directory
+env_path = Path(__file__).parent / ".env"
+load_dotenv(env_path)
 
 mcp = FastMCP("Fabric User Data Navigator")
 
@@ -259,6 +268,61 @@ def find_related_facets(
     )
     response.raise_for_status()
     return response.json()
+
+
+@mcp.tool()
+def generate_image(prompt: str) -> Image:
+    """
+    Generate an image using Google's Gemini 2.5 Flash Image model (Nano Banana) from a text prompt.
+    
+    Args:
+        prompt: Text description of the image to generate
+    
+    Returns:
+        An Image object that will be rendered in MCP clients like Cursor.
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("Missing GEMINI_API_KEY environment variable. Please set it to use image generation.")
+    
+    try:
+        client = genai.Client(api_key=api_key)
+        
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-image",
+            contents=[prompt],
+        )
+        
+        # Extract image data from response
+        image_data = None
+        mime_type = None
+        
+        for part in response.parts:
+            if part.inline_data is not None:
+                image_data = part.inline_data.data
+                mime_type = part.inline_data.mime_type
+                break
+        
+        if image_data is None:
+            raise ValueError("No image data returned from Gemini API. The response may not contain an image.")
+        
+        # Convert MIME type to format string (e.g., "image/png" -> "png")
+        # Handle common MIME types
+        format_map = {
+            "image/png": "png",
+            "image/jpeg": "jpeg",
+            "image/jpg": "jpeg",
+            "image/gif": "gif",
+            "image/webp": "webp"
+        }
+        image_format = format_map.get(mime_type, "png")  # Default to png if unknown
+        
+        # Return Image object using FastMCP's Image class
+        # This will be automatically converted to MCP ImageContent format
+        return Image(data=image_data, format=image_format)
+    
+    except Exception as e:
+        raise ValueError(f"Error generating image with Gemini API: {str(e)}")
 
 
 if __name__ == "__main__":
