@@ -5,10 +5,8 @@ A FastMCP server for the AI Tinkerers project.
 ## Setup
 
 ```bash
-cd mcp-server
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+uv sync
+source .venv/bin/activate
 ```
 
 ## Running the Server
@@ -16,7 +14,7 @@ pip install -r requirements.txt
 ### HTTP Transport (for remote access)
 
 ```bash
-python server.py
+uv run main.py
 ```
 
 The server will be available at `http://localhost:8000/mcp`
@@ -25,17 +23,17 @@ The server will be available at `http://localhost:8000/mcp`
 
 ```bash
 # stdio transport (for local MCP clients)
-fastmcp run server.py:mcp
+fastmcp run main.py:mcp
 
 # HTTP transport
-fastmcp run server.py:mcp --transport http --port 8000
+fastmcp run main.py:mcp --transport http --port 8000
 ```
 
 ## Available Tools
 
-- **greet**: Greet someone by name
-  - Parameters: `name` (string)
-  - Returns: A greeting message
+-   **greet**: Greet someone by name
+    -   Parameters: `name` (string)
+    -   Returns: A greeting message
 
 ## Connecting with a Client
 
@@ -52,4 +50,3 @@ async def call_tool(name: str):
 
 asyncio.run(call_tool("World"))
 ```
-
