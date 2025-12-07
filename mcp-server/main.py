@@ -1,14 +1,20 @@
 from fastmcp import FastMCP
 import requests
-from typing import Optional, Dict
+from typing import Optional, Dict, Literal
 
-mcp = FastMCP("OnFabric API MCP Server")
+mcp = FastMCP("Fabric User Data Navigator")
 
 # Base configuration
 API_BASE_URL = "https://api.onfabric.io/api/v1"
 
 # Cache tapestry IDs per auth token
 _tapestry_cache: Dict[str, str] = {}
+
+# Search mode configurations
+SEARCH_MODES = {
+    "precise": {"threshold": 0.75, "top_k": 5},
+    "explore": {"threshold": 0.5, "top_k": 50}
+}
 
 
 def get_headers(auth_token: str):
@@ -43,101 +49,101 @@ def get_tapestry_id(auth_token: str) -> str:
     return tapestry_id
 
 
-# 0. List Tapestries
-@mcp.tool()
-def list_tapestries(auth_token: str) -> list:
-    """
-    List all tapestries available for the authenticated user.
-    Returns a list of tapestries with their IDs and metadata.
-    
-    Args:
-        auth_token: Bearer token for OnFabric API authentication
-    """
-    response = requests.get(
-        f"{API_BASE_URL}/tapestries",
-        headers=get_headers(auth_token)
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-# 1. Get Facet Types
-@mcp.tool()
-def get_facet_types(auth_token: str) -> dict:
-    """
-    Returns all available semantic facet types and their descriptions.
-    
-    Args:
-        auth_token: Bearer token for OnFabric API authentication
-    """
-    response = requests.get(
-        f"{API_BASE_URL}/facets/types",
-        headers=get_headers(auth_token)
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-# 2. Get Top Facets (unified for topics, entities, people)
 @mcp.tool()
 def get_top_facets(
     auth_token: str,
     facet_type: str,
-    top_k: int = 10
+    top_k: int = 10,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ) -> dict:
     """
-    Get the most prominent facets of a specific type, ranked by thread count.
+    Get the user's most frequently occurring facets of a given type, ranked by how often they appear in the user's interactions.
+    
+    Use this tool to discover what the user is most interested in or engaged with.
     
     Args:
-        auth_token: Bearer token for OnFabric API authentication
-        facet_type: Type of facets to retrieve ('topics', 'entities', or 'people')
+        auth_token: Bearer token for API authentication
+        facet_type: Type of facets to retrieve. One of:
+            - 'topics': General subjects or categories (e.g., fashion, cooking, investing)
+            - 'entities': Specific named things like technologies (e.g., iPhone 15, React)
+            - 'people': Named individuals (e.g., Elon Musk, Taylor Swift)
+            - 'companies': Organizations and brands (e.g., Nike, Google, Prada)
+            - 'locations': Geographic places (e.g., Paris, California)
+            - 'products': Digital products and apps (e.g., Spotify, TikTok)
+            - 'things': Physical objects (e.g., coffee table, sneakers, handbag)
         top_k: Number of top facets to return (default: 10)
+        from_date: Optional start date filter in ISO format (e.g., '2024-01-01T00:00:00Z')
+        to_date: Optional end date filter in ISO format (e.g., '2024-12-31T23:59:59Z')
+    
+    Returns:
+        List of facets with their IDs, names, and occurrence counts, sorted by frequency.
     """
+    payload = {
+        "tapestry_id": get_tapestry_id(auth_token),
+        "top_k": top_k
+    }
+    
+    if from_date:
+        payload["from_date"] = from_date
+    if to_date:
+        payload["to_date"] = to_date
+    
     response = requests.post(
         f"{API_BASE_URL}/facets/{facet_type}/top",
         headers=get_headers(auth_token),
-        json={
-            "tapestry_id": get_tapestry_id(auth_token),
-            "top_k": top_k
-        }
+        json=payload
     )
     response.raise_for_status()
     return response.json()
 
 
-# 3. Search Facets
 @mcp.tool()
 def search_facets(
     auth_token: str,
-    text: str,
-    facet_type: str,
-    top_k: Optional[int] = None,
-    threshold: Optional[float] = None
+    query: str,
+    facet_type: Optional[str] = None,
+    search_mode: Literal["precise", "explore"] = "explore",
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ) -> dict:
     """
-    Semantic search for canonical facets matching the input text.
+    Search for facets semantically related to a query in the user's interaction history.
+    
+    Use this tool to find specific facets or explore related concepts the user has engaged with.
     
     Args:
-        auth_token: Bearer token for OnFabric API authentication
-        text: Search query text
-        facet_type: Type of facets to search (e.g., 'companies', 'topics', 'people')
-        top_k: Number of results to return (optional)
-        threshold: Semantic similarity threshold (0.0-1.0, optional)
+        auth_token: Bearer token for API authentication
+        query: The search text to find semantically similar facets
+        facet_type: Optional filter by facet type. One of: 'topics', 'entities', 'people', 'companies', 'locations', 'products', 'things'
+        search_mode: Controls search precision:
+            - 'precise': Find exact or very close matches (returns top 5). 
+              Use when looking for a specific thing.
+              Example: query='Prada', facet_type='companies' checks if user has interacted with Prada specifically.
+            - 'explore': Find semantically related facets (returns top 50). 
+              Use for broader discovery.
+              Example: query='fashion', facet_type='companies' finds all fashion-related brands the user likes.
+        from_date: Optional start date filter in ISO format (e.g., '2024-01-01T00:00:00Z')
+        to_date: Optional end date filter in ISO format (e.g., '2024-12-31T23:59:59Z')
+    
+    Returns:
+        List of matching facets with their IDs, names, and similarity scores.
     """
+    mode_config = SEARCH_MODES[search_mode]
+    
     payload = {
         "tapestry_id": get_tapestry_id(auth_token),
-        "text": text,
-        "type": facet_type
+        "text": query,
+        "retrieval_config": {"top_k": mode_config["top_k"]},
+        "search_config": {"threshold": mode_config["threshold"]}
     }
     
-    if top_k is not None or threshold is not None:
-        payload["retrieval_config"] = {}
-        payload["search_config"] = {}
-        
-        if top_k is not None:
-            payload["retrieval_config"]["top_k"] = top_k
-        if threshold is not None:
-            payload["search_config"]["threshold"] = threshold
+    if facet_type:
+        payload["type"] = facet_type
+    if from_date:
+        payload["from_date"] = from_date
+    if to_date:
+        payload["to_date"] = to_date
     
     response = requests.post(
         f"{API_BASE_URL}/facets/search",
@@ -148,45 +154,6 @@ def search_facets(
     return response.json()
 
 
-# 4. Get Threads by Facet
-@mcp.tool()
-def get_facet_threads(
-    auth_token: str,
-    facet_id: str,
-    limit: int = 10,
-    from_date: Optional[str] = None,
-    to_date: Optional[str] = None
-) -> dict:
-    """
-    Get threads linked to a specific facet, ordered by most recent first.
-    
-    Args:
-        auth_token: Bearer token for OnFabric API authentication
-        facet_id: The facet ID to get threads for
-        limit: Maximum number of threads to return (default: 10)
-        from_date: Start date filter in ISO format (e.g., '2024-01-01T00:00:00Z', optional)
-        to_date: End date filter in ISO format (e.g., '2024-12-31T23:59:59Z', optional)
-    """
-    payload = {
-        "tapestry_id": get_tapestry_id(auth_token),
-        "limit": limit
-    }
-    
-    if from_date:
-        payload["from_date"] = from_date
-    if to_date:
-        payload["to_date"] = to_date
-    
-    response = requests.post(
-        f"{API_BASE_URL}/facets/{facet_id}/threads",
-        headers=get_headers(auth_token),
-        json=payload
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-# 5. Get Memories by Facet
 @mcp.tool()
 def get_facet_memories(
     auth_token: str,
@@ -196,14 +163,25 @@ def get_facet_memories(
     to_date: Optional[str] = None
 ) -> dict:
     """
-    Get memories linked to a specific facet via shared threads.
+    Get memories (summaries of user interactions) linked to a specific facet.
+    
+    Use this tool to understand the CONTEXT of why a user is interested in a facet.
+    Memories are LLM-generated summaries of interactions that occurred close together in time.
+    A memory is linked to a facet if at least one of its underlying interactions contains that facet.
+    
+    Example use cases:
+    - User is interested in 'Prada': memories reveal if they work there, shop there, or just browsed once
+    - User has 'cooking' as a top topic: memories show what kind of cooking (recipes, restaurants, equipment)
     
     Args:
-        auth_token: Bearer token for OnFabric API authentication
-        facet_id: The facet ID to get memories for
+        auth_token: Bearer token for API authentication
+        facet_id: The ID of the facet to get memories for (obtained from get_top_facets or search_facets)
         limit: Maximum number of memories to return (default: 10)
-        from_date: Start date filter in ISO format (optional)
-        to_date: End date filter in ISO format (optional)
+        from_date: Optional start date filter in ISO format (e.g., '2024-01-01T00:00:00Z')
+        to_date: Optional end date filter in ISO format (e.g., '2024-12-31T23:59:59Z')
+    
+    Returns:
+        List of memories with their summaries and timestamps, showing what the user was doing related to this facet.
     """
     payload = {
         "tapestry_id": get_tapestry_id(auth_token),
@@ -224,27 +202,41 @@ def get_facet_memories(
     return response.json()
 
 
-# 6. Get Neighbour Facets
 @mcp.tool()
-def get_neighbour_facets(
+def find_related_facets(
     auth_token: str,
     facet_id: str,
-    neighbour_type: str,
-    top_k: int = 10,
+    related_type: str,
+    search_mode: Literal["precise", "explore"] = "explore",
     from_date: Optional[str] = None,
     to_date: Optional[str] = None
 ) -> dict:
     """
-    Get facets that share threads with a given facet, ordered by shared thread count.
+    Find facets that frequently co-occur with a given facet in the user's interactions.
+    
+    Use this tool to discover connections and relationships between concepts in the user's data.
+    Facets co-occur when they are extracted from the same interaction.
+    
+    Example use cases:
+    - Find musicians (people) the user likes: first find 'music' topic, then find related 'people' facets
+    - Find locations associated with 'work' topic: discover where the user's work-related interactions happen
+    - Find brands (companies) related to 'fitness' topic: discover the user's preferred fitness brands
     
     Args:
-        auth_token: Bearer token for OnFabric API authentication
-        facet_id: The facet ID to find neighbours for
-        neighbour_type: Type of neighbour facets ('things', 'locations', 'topics', etc.)
-        top_k: Number of neighbour facets to return (default: 10)
-        from_date: Start date filter in ISO format (optional)
-        to_date: End date filter in ISO format (optional)
+        auth_token: Bearer token for API authentication
+        facet_id: The ID of the facet to find related facets for
+        related_type: Type of related facets to find. One of: 'topics', 'entities', 'people', 'companies', 'locations', 'products', 'things'
+        search_mode: Controls how many results to return:
+            - 'precise': Returns top 5 most strongly co-occurring facets
+            - 'explore': Returns top 50 co-occurring facets for broader discovery
+        from_date: Optional start date filter in ISO format (e.g., '2024-01-01T00:00:00Z')
+        to_date: Optional end date filter in ISO format (e.g., '2024-12-31T23:59:59Z')
+    
+    Returns:
+        List of related facets with their IDs, names, and co-occurrence counts.
     """
+    top_k = 5 if search_mode == "precise" else 50
+    
     payload = {
         "tapestry_id": get_tapestry_id(auth_token),
         "top_k": top_k
@@ -256,35 +248,9 @@ def get_neighbour_facets(
         payload["to_date"] = to_date
     
     response = requests.post(
-        f"{API_BASE_URL}/facets/{facet_id}/neighbours/{neighbour_type}",
+        f"{API_BASE_URL}/facets/{facet_id}/neighbours/{related_type}",
         headers=get_headers(auth_token),
         json=payload
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-# 7. Get Neighbour Memories
-@mcp.tool()
-def get_neighbour_memories(
-    auth_token: str,
-    memory_id: str,
-    facet_type: str,
-    top_k: int = 10
-) -> dict:
-    """
-    Get memories that share facets with a given memory, ordered by shared facet count.
-    
-    Args:
-        auth_token: Bearer token for OnFabric API authentication
-        memory_id: The memory ID to find neighbours for
-        facet_type: Type of facets to use for finding neighbours ('topics', 'people', etc.)
-        top_k: Number of neighbour memories to return (default: 10)
-    """
-    response = requests.get(
-        f"{API_BASE_URL}/memories/{memory_id}/neighbours/{facet_type}",
-        headers=get_headers(auth_token),
-        params={"top_k": top_k}
     )
     response.raise_for_status()
     return response.json()
@@ -299,4 +265,3 @@ if __name__ == "__main__":
     else:
         # Running interactively, use HTTP transport
         mcp.run(transport="http", port=8000)
-

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-OnFabric API MCP Client
+Fabric User Data Navigator MCP Client
 
-A client script for interacting with the OnFabric API MCP server.
+A client script for interacting with the Fabric MCP server to explore user data.
 """
 
 import asyncio
@@ -75,7 +75,7 @@ async def call_tool(client: Client, tool_name: str, params: dict):
 
 
 async def example_usage():
-    """Example usage of the OnFabric API MCP client."""
+    """Example usage demonstrating how to navigate user data."""
     if not AUTH_TOKEN:
         print("Error: ONFABRIC_AUTH_TOKEN environment variable is required", file=sys.stderr)
         sys.exit(1)
@@ -85,44 +85,79 @@ async def example_usage():
     client = Client(MCP_SERVER_URL)
     
     async with client:
-        # Example 1: Get facet types
+        # Example 1: Discover user's top interests
         print("=" * 60)
-        print("Example 1: Getting facet types")
+        print("Example 1: Discovering user's top topics")
         print("=" * 60)
-        types = await call_tool(client, "get_facet_types", {
-            "auth_token": AUTH_TOKEN
-        })
-        if types:
-            print_json(types)
-        
-        print("\n")
-        
-        # Example 2: Get top facets (topics)
-        print("=" * 60)
-        print("Example 2: Getting top topics")
-        print("=" * 60)
-        top_facets = await call_tool(client, "get_top_facets", {
+        top_topics = await call_tool(client, "get_top_facets", {
             "auth_token": AUTH_TOKEN,
             "facet_type": "topics",
             "top_k": 5
         })
-        if top_facets:
-            print_json(top_facets)
+        if top_topics:
+            print_json(top_topics)
         
         print("\n")
         
-        # Example 3: Search facets
+        # Example 2: Search for fashion-related companies (explore mode)
         print("=" * 60)
-        print("Example 3: Searching for facets")
+        print("Example 2: Finding fashion-related brands (explore mode)")
         print("=" * 60)
-        search_results = await call_tool(client, "search_facets", {
+        fashion_brands = await call_tool(client, "search_facets", {
             "auth_token": AUTH_TOKEN,
-            "text": "fashion",
+            "query": "fashion",
             "facet_type": "companies",
-            "top_k": 5
+            "search_mode": "explore"
         })
-        if search_results:
-            print_json(search_results)
+        if fashion_brands:
+            print_json(fashion_brands)
+        
+        print("\n")
+        
+        # Example 3: Check if user has interacted with a specific brand (precise mode)
+        print("=" * 60)
+        print("Example 3: Checking for specific brand interaction (precise mode)")
+        print("=" * 60)
+        specific_brand = await call_tool(client, "search_facets", {
+            "auth_token": AUTH_TOKEN,
+            "query": "Nike",
+            "facet_type": "companies",
+            "search_mode": "precise"
+        })
+        if specific_brand:
+            print_json(specific_brand)
+        
+        print("\n")
+        
+        # Example 4: Get memories for a facet (if we found one)
+        if top_topics and isinstance(top_topics, list) and len(top_topics) > 0:
+            facet_id = top_topics[0].get("id") or top_topics[0].get("facet_id")
+            if facet_id:
+                print("=" * 60)
+                print(f"Example 4: Getting memories for top topic")
+                print("=" * 60)
+                memories = await call_tool(client, "get_facet_memories", {
+                    "auth_token": AUTH_TOKEN,
+                    "facet_id": facet_id,
+                    "limit": 5
+                })
+                if memories:
+                    print_json(memories)
+                
+                print("\n")
+                
+                # Example 5: Find related people for the top topic
+                print("=" * 60)
+                print(f"Example 5: Finding people related to top topic")
+                print("=" * 60)
+                related_people = await call_tool(client, "find_related_facets", {
+                    "auth_token": AUTH_TOKEN,
+                    "facet_id": facet_id,
+                    "related_type": "people",
+                    "search_mode": "explore"
+                })
+                if related_people:
+                    print_json(related_people)
 
 
 async def interactive_mode():
@@ -136,25 +171,26 @@ async def interactive_mode():
     client = Client(MCP_SERVER_URL)
     
     async with client:
-        # Get available tools
+        # Show available tools
         print("Available tools:")
-        print("  0. list_tapestries")
-        print("  1. get_facet_types")
-        print("  2. get_top_facets")
-        print("  3. search_facets")
-        print("  4. get_facet_threads")
-        print("  5. get_facet_memories")
-        print("  6. get_neighbour_facets")
-        print("  7. get_neighbour_memories")
+        print("  1. get_top_facets      - Discover most frequent facets by type")
+        print("  2. search_facets       - Search facets semantically (precise/explore mode)")
+        print("  3. get_facet_memories  - Get context for why user is interested in a facet")
+        print("  4. find_related_facets - Find co-occurring facets")
         print("\n")
         
-        # Simple example: get facet types
-        print("Fetching facet types...")
-        types = await call_tool(client, "get_facet_types", {
-            "auth_token": AUTH_TOKEN
+        print("Facet types: topics, entities, people, companies, locations, products, things")
+        print("\n")
+        
+        # Quick demo: get top topics
+        print("Fetching top 5 topics...")
+        topics = await call_tool(client, "get_top_facets", {
+            "auth_token": AUTH_TOKEN,
+            "facet_type": "topics",
+            "top_k": 5
         })
-        if types:
-            print_json(types)
+        if topics:
+            print_json(topics)
 
 
 def main():
@@ -162,7 +198,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="OnFabric API MCP Client",
+        description="Fabric User Data Navigator MCP Client",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -177,7 +213,13 @@ Examples:
 
 Environment Variables:
   MCP_SERVER_URL        - MCP server URL (default: http://localhost:8000/mcp)
-  ONFABRIC_AUTH_TOKEN   - Bearer token for OnFabric API authentication (required)
+  ONFABRIC_AUTH_TOKEN   - Bearer token for API authentication (required)
+
+Available Tools:
+  get_top_facets       - Get most frequent facets by type
+  search_facets        - Search facets (precise or explore mode)
+  get_facet_memories   - Get memories linked to a facet
+  find_related_facets  - Find co-occurring facets
         """
     )
     
