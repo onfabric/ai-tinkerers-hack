@@ -101,19 +101,14 @@ async def example_usage():
         
         # Example 2: Get top facets (topics)
         print("=" * 60)
-        print("Example 2: Getting top topics (requires tapestry_id)")
+        print("Example 2: Getting top topics")
         print("=" * 60)
-        tapestry_id = os.getenv("TAPESTRY_ID")
-        if tapestry_id:
-            top_facets = await call_tool(client, "get_top_facets", {
-                "facet_type": "topics",
-                "tapestry_id": tapestry_id,
-                "top_k": 5
-            })
-            if top_facets:
-                print_json(top_facets)
-        else:
-            print("Skipped: Set TAPESTRY_ID environment variable to run this example")
+        top_facets = await call_tool(client, "get_top_facets", {
+            "facet_type": "topics",
+            "top_k": 5
+        })
+        if top_facets:
+            print_json(top_facets)
         
         print("\n")
         
@@ -121,18 +116,13 @@ async def example_usage():
         print("=" * 60)
         print("Example 3: Searching for facets")
         print("=" * 60)
-        tapestry_id = os.getenv("TAPESTRY_ID")
-        if tapestry_id:
-            search_results = await call_tool(client, "search_facets", {
-                "tapestry_id": tapestry_id,
-                "text": "fashion",
-                "facet_type": "companies",
-                "top_k": 5
-            })
-            if search_results:
-                print_json(search_results)
-        else:
-            print("Skipped: Set TAPESTRY_ID environment variable to run this example")
+        search_results = await call_tool(client, "search_facets", {
+            "text": "fashion",
+            "facet_type": "companies",
+            "top_k": 5
+        })
+        if search_results:
+            print_json(search_results)
 
 
 async def interactive_mode():
@@ -144,6 +134,7 @@ async def interactive_mode():
     async with client:
         # Get available tools
         print("Available tools:")
+        print("  0. list_tapestries")
         print("  1. get_facet_types")
         print("  2. get_top_facets")
         print("  3. search_facets")
@@ -180,7 +171,6 @@ Examples:
 
 Environment Variables:
   MCP_SERVER_URL    - MCP server URL (default: http://localhost:8000/mcp)
-  TAPESTRY_ID       - Default tapestry ID for examples
         """
     )
     

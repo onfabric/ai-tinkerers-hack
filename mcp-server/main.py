@@ -18,6 +18,9 @@ mcp = FastMCP("OnFabric API MCP Server")
 API_BASE_URL = "https://api.onfabric.io/api/v1"
 AUTH_TOKEN = os.getenv("ONFABRIC_AUTH_TOKEN", "")
 
+# Cached tapestry ID
+_cached_tapestry_id: Optional[str] = None
+
 
 def get_headers():
     """Get common headers for API requests."""
@@ -25,6 +28,46 @@ def get_headers():
         "Authorization": f"Bearer {AUTH_TOKEN}",
         "Content-Type": "application/json"
     }
+
+
+def get_tapestry_id() -> str:
+    """
+    Fetch the tapestry ID from the API using the bearer token.
+    Caches the result to avoid repeated API calls.
+    """
+    global _cached_tapestry_id
+    
+    if _cached_tapestry_id is not None:
+        return _cached_tapestry_id
+    
+    response = requests.get(
+        f"{API_BASE_URL}/tapestries",
+        headers=get_headers()
+    )
+    response.raise_for_status()
+    
+    tapestries = response.json()
+    if not tapestries:
+        raise ValueError("No tapestries found for the authenticated user")
+    
+    # Use the first tapestry
+    _cached_tapestry_id = tapestries[0]["id"]
+    return _cached_tapestry_id
+
+
+# 0. List Tapestries
+@mcp.tool()
+def list_tapestries() -> list:
+    """
+    List all tapestries available for the authenticated user.
+    Returns a list of tapestries with their IDs and metadata.
+    """
+    response = requests.get(
+        f"{API_BASE_URL}/tapestries",
+        headers=get_headers()
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 # 1. Get Facet Types
@@ -46,7 +89,6 @@ def get_facet_types() -> dict:
 @mcp.tool()
 def get_top_facets(
     facet_type: str,
-    tapestry_id: str,
     top_k: int = 10
 ) -> dict:
     """
@@ -54,14 +96,13 @@ def get_top_facets(
     
     Args:
         facet_type: Type of facets to retrieve ('topics', 'entities', or 'people')
-        tapestry_id: The tapestry ID to query
         top_k: Number of top facets to return (default: 10)
     """
     response = requests.post(
         f"{API_BASE_URL}/facets/{facet_type}/top",
         headers=get_headers(),
         json={
-            "tapestry_id": tapestry_id,
+            "tapestry_id": get_tapestry_id(),
             "top_k": top_k
         }
     )
@@ -72,7 +113,6 @@ def get_top_facets(
 # 3. Search Facets
 @mcp.tool()
 def search_facets(
-    tapestry_id: str,
     text: str,
     facet_type: str,
     top_k: Optional[int] = None,
@@ -82,14 +122,13 @@ def search_facets(
     Semantic search for canonical facets matching the input text.
     
     Args:
-        tapestry_id: The tapestry ID to search within
         text: Search query text
         facet_type: Type of facets to search (e.g., 'companies', 'topics', 'people')
         top_k: Number of results to return (optional)
         threshold: Semantic similarity threshold (0.0-1.0, optional)
     """
     payload = {
-        "tapestry_id": tapestry_id,
+        "tapestry_id": get_tapestry_id(),
         "text": text,
         "type": facet_type
     }
@@ -116,7 +155,6 @@ def search_facets(
 @mcp.tool()
 def get_facet_threads(
     facet_id: str,
-    tapestry_id: str,
     limit: int = 10,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None
@@ -126,13 +164,12 @@ def get_facet_threads(
     
     Args:
         facet_id: The facet ID to get threads for
-        tapestry_id: The tapestry ID
         limit: Maximum number of threads to return (default: 10)
         from_date: Start date filter in ISO format (e.g., '2024-01-01T00:00:00Z', optional)
         to_date: End date filter in ISO format (e.g., '2024-12-31T23:59:59Z', optional)
     """
     payload = {
-        "tapestry_id": tapestry_id,
+        "tapestry_id": get_tapestry_id(),
         "limit": limit
     }
     
@@ -154,7 +191,6 @@ def get_facet_threads(
 @mcp.tool()
 def get_facet_memories(
     facet_id: str,
-    tapestry_id: str,
     limit: int = 10,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None
@@ -164,13 +200,12 @@ def get_facet_memories(
     
     Args:
         facet_id: The facet ID to get memories for
-        tapestry_id: The tapestry ID
         limit: Maximum number of memories to return (default: 10)
         from_date: Start date filter in ISO format (optional)
         to_date: End date filter in ISO format (optional)
     """
     payload = {
-        "tapestry_id": tapestry_id,
+        "tapestry_id": get_tapestry_id(),
         "limit": limit
     }
     
@@ -193,7 +228,6 @@ def get_facet_memories(
 def get_neighbour_facets(
     facet_id: str,
     neighbour_type: str,
-    tapestry_id: str,
     top_k: int = 10,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None
@@ -204,13 +238,12 @@ def get_neighbour_facets(
     Args:
         facet_id: The facet ID to find neighbours for
         neighbour_type: Type of neighbour facets ('things', 'locations', 'topics', etc.)
-        tapestry_id: The tapestry ID
         top_k: Number of neighbour facets to return (default: 10)
         from_date: Start date filter in ISO format (optional)
         to_date: End date filter in ISO format (optional)
     """
     payload = {
-        "tapestry_id": tapestry_id,
+        "tapestry_id": get_tapestry_id(),
         "top_k": top_k
     }
     
