@@ -253,5 +253,12 @@ def get_neighbour_memories(
 
 
 if __name__ == "__main__":
-    mcp.run(transport="http", port=8000)
+    import sys
+    # Check if running in stdio mode (stdin is not a TTY, meaning it's being piped)
+    if not sys.stdin.isatty():
+        # Running in stdio mode (for MCP clients like Cursor)
+        mcp.run()  # Default is stdio transport
+    else:
+        # Running interactively, use HTTP transport
+        mcp.run(transport="http", port=8000)
 
