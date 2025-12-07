@@ -82,7 +82,8 @@ async def example_usage():
     
     print(f"Connecting to MCP server at {MCP_SERVER_URL}...\n")
     
-    client = Client(MCP_SERVER_URL)
+    # Pass auth token as header for the MCP server to forward to Fabric API
+    client = Client(MCP_SERVER_URL, auth=AUTH_TOKEN)
     
     async with client:
         # Example 1: Discover user's top interests
@@ -90,7 +91,6 @@ async def example_usage():
         print("Example 1: Discovering user's top topics")
         print("=" * 60)
         top_topics = await call_tool(client, "get_top_facets", {
-            "auth_token": AUTH_TOKEN,
             "facet_type": "topics",
             "top_k": 5
         })
@@ -104,7 +104,6 @@ async def example_usage():
         print("Example 2: Finding fashion-related brands (explore mode)")
         print("=" * 60)
         fashion_brands = await call_tool(client, "search_facets", {
-            "auth_token": AUTH_TOKEN,
             "query": "fashion",
             "facet_type": "companies",
             "search_mode": "explore"
@@ -119,7 +118,6 @@ async def example_usage():
         print("Example 3: Checking for specific brand interaction (precise mode)")
         print("=" * 60)
         specific_brand = await call_tool(client, "search_facets", {
-            "auth_token": AUTH_TOKEN,
             "query": "Nike",
             "facet_type": "companies",
             "search_mode": "precise"
@@ -137,7 +135,6 @@ async def example_usage():
                 print(f"Example 4: Getting memories for top topic")
                 print("=" * 60)
                 memories = await call_tool(client, "get_facet_memories", {
-                    "auth_token": AUTH_TOKEN,
                     "facet_id": facet_id,
                     "limit": 5
                 })
@@ -151,7 +148,6 @@ async def example_usage():
                 print(f"Example 5: Finding people related to top topic")
                 print("=" * 60)
                 related_people = await call_tool(client, "find_related_facets", {
-                    "auth_token": AUTH_TOKEN,
                     "facet_id": facet_id,
                     "related_type": "people",
                     "search_mode": "explore"
@@ -168,7 +164,8 @@ async def interactive_mode():
     
     print(f"Connecting to MCP server at {MCP_SERVER_URL}...\n")
     
-    client = Client(MCP_SERVER_URL)
+    # Pass auth token as header for the MCP server to forward to Fabric API
+    client = Client(MCP_SERVER_URL, auth=AUTH_TOKEN)
     
     async with client:
         # Show available tools
@@ -185,7 +182,6 @@ async def interactive_mode():
         # Quick demo: get top topics
         print("Fetching top 5 topics...")
         topics = await call_tool(client, "get_top_facets", {
-            "auth_token": AUTH_TOKEN,
             "facet_type": "topics",
             "top_k": 5
         })

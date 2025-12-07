@@ -1,4 +1,5 @@
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 import requests
 from typing import Optional, Dict, Literal
 
@@ -17,25 +18,37 @@ SEARCH_MODES = {
 }
 
 
-def get_headers(auth_token: str):
-    """Get common headers for API requests."""
+def get_auth_token() -> str:
+    """Extract bearer token from incoming MCP request headers."""
+    headers = get_http_headers()
+    auth_header = headers.get("authorization", "")
+    if not auth_header:
+        raise ValueError("Missing Authorization header. Please provide a Bearer token.")
+    if auth_header.startswith("Bearer "):
+        return auth_header[7:]
+    return auth_header
+
+
+def get_api_headers() -> dict:
+    """Get headers for Fabric API requests using the token from MCP request."""
     return {
-        "Authorization": f"Bearer {auth_token}",
+        "Authorization": f"Bearer {get_auth_token()}",
         "Content-Type": "application/json"
     }
 
 
-def get_tapestry_id(auth_token: str) -> str:
+def get_tapestry_id() -> str:
     """
-    Fetch the tapestry ID from the API using the bearer token.
+    Fetch the tapestry ID from the API using the bearer token from headers.
     Caches the result per token to avoid repeated API calls.
     """
+    auth_token = get_auth_token()
     if auth_token in _tapestry_cache:
         return _tapestry_cache[auth_token]
     
     response = requests.get(
         f"{API_BASE_URL}/tapestries",
-        headers=get_headers(auth_token)
+        headers=get_api_headers()
     )
     response.raise_for_status()
     
@@ -51,7 +64,6 @@ def get_tapestry_id(auth_token: str) -> str:
 
 @mcp.tool()
 def get_top_facets(
-    auth_token: str,
     facet_type: str,
     top_k: int = 10,
     from_date: Optional[str] = None,
@@ -63,7 +75,6 @@ def get_top_facets(
     Use this tool to discover what the user is most interested in or engaged with.
     
     Args:
-        auth_token: Bearer token for API authentication
         facet_type: Type of facets to retrieve. One of:
             - 'topics': General subjects or categories (e.g., fashion, cooking, investing)
             - 'entities': Specific named things like technologies (e.g., iPhone 15, React)
@@ -80,7 +91,7 @@ def get_top_facets(
         List of facets with their IDs, names, and occurrence counts, sorted by frequency.
     """
     payload = {
-        "tapestry_id": get_tapestry_id(auth_token),
+        "tapestry_id": get_tapestry_id(),
         "top_k": top_k
     }
     
@@ -91,7 +102,7 @@ def get_top_facets(
     
     response = requests.post(
         f"{API_BASE_URL}/facets/{facet_type}/top",
-        headers=get_headers(auth_token),
+        headers=get_api_headers(),
         json=payload
     )
     response.raise_for_status()
@@ -100,7 +111,6 @@ def get_top_facets(
 
 @mcp.tool()
 def search_facets(
-    auth_token: str,
     query: str,
     facet_type: Optional[str] = None,
     search_mode: Literal["precise", "explore"] = "explore",
@@ -113,7 +123,6 @@ def search_facets(
     Use this tool to find specific facets or explore related concepts the user has engaged with.
     
     Args:
-        auth_token: Bearer token for API authentication
         query: The search text to find semantically similar facets
         facet_type: Optional filter by facet type. One of: 'topics', 'entities', 'people', 'companies', 'locations', 'products', 'things'
         search_mode: Controls search precision:
@@ -132,7 +141,7 @@ def search_facets(
     mode_config = SEARCH_MODES[search_mode]
     
     payload = {
-        "tapestry_id": get_tapestry_id(auth_token),
+        "tapestry_id": get_tapestry_id(),
         "text": query,
         "retrieval_config": {"top_k": mode_config["top_k"]},
         "search_config": {"threshold": mode_config["threshold"]}
@@ -147,7 +156,7 @@ def search_facets(
     
     response = requests.post(
         f"{API_BASE_URL}/facets/search",
-        headers=get_headers(auth_token),
+        headers=get_api_headers(),
         json=payload
     )
     response.raise_for_status()
@@ -156,7 +165,6 @@ def search_facets(
 
 @mcp.tool()
 def get_facet_memories(
-    auth_token: str,
     facet_id: str,
     limit: int = 10,
     from_date: Optional[str] = None,
@@ -174,7 +182,6 @@ def get_facet_memories(
     - User has 'cooking' as a top topic: memories show what kind of cooking (recipes, restaurants, equipment)
     
     Args:
-        auth_token: Bearer token for API authentication
         facet_id: The ID of the facet to get memories for (obtained from get_top_facets or search_facets)
         limit: Maximum number of memories to return (default: 10)
         from_date: Optional start date filter in ISO format (e.g., '2024-01-01T00:00:00Z')
@@ -184,7 +191,7 @@ def get_facet_memories(
         List of memories with their summaries and timestamps, showing what the user was doing related to this facet.
     """
     payload = {
-        "tapestry_id": get_tapestry_id(auth_token),
+        "tapestry_id": get_tapestry_id(),
         "limit": limit
     }
     
@@ -195,7 +202,7 @@ def get_facet_memories(
     
     response = requests.post(
         f"{API_BASE_URL}/facets/{facet_id}/memories",
-        headers=get_headers(auth_token),
+        headers=get_api_headers(),
         json=payload
     )
     response.raise_for_status()
@@ -204,7 +211,6 @@ def get_facet_memories(
 
 @mcp.tool()
 def find_related_facets(
-    auth_token: str,
     facet_id: str,
     related_type: str,
     search_mode: Literal["precise", "explore"] = "explore",
@@ -223,7 +229,6 @@ def find_related_facets(
     - Find brands (companies) related to 'fitness' topic: discover the user's preferred fitness brands
     
     Args:
-        auth_token: Bearer token for API authentication
         facet_id: The ID of the facet to find related facets for
         related_type: Type of related facets to find. One of: 'topics', 'entities', 'people', 'companies', 'locations', 'products', 'things'
         search_mode: Controls how many results to return:
@@ -238,7 +243,7 @@ def find_related_facets(
     top_k = 5 if search_mode == "precise" else 50
     
     payload = {
-        "tapestry_id": get_tapestry_id(auth_token),
+        "tapestry_id": get_tapestry_id(),
         "top_k": top_k
     }
     
@@ -249,7 +254,7 @@ def find_related_facets(
     
     response = requests.post(
         f"{API_BASE_URL}/facets/{facet_id}/neighbours/{related_type}",
-        headers=get_headers(auth_token),
+        headers=get_api_headers(),
         json=payload
     )
     response.raise_for_status()
