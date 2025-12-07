@@ -1,4 +1,4 @@
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Image
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.utilities.types import Image
 import requests
@@ -323,6 +323,88 @@ def generate_image(prompt: str) -> Image:
     
     except Exception as e:
         raise ValueError(f"Error generating image with Gemini API: {str(e)}")
+
+
+@mcp.tool()
+def get_instagram_stories_previews(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    limit: int = 20
+) -> dict:
+    """
+    Get Instagram Stories the user has viewed, with their thread IDs and preview information.
+    
+    Use this tool to discover what Instagram Stories content the user has engaged with.
+    Each story includes a thread_id that can be used with get_thread_image to retrieve the actual image.
+    
+    Args:
+        from_date: Optional start date filter in ISO format (e.g., '2024-01-01T00:00:00Z')
+        to_date: Optional end date filter in ISO format (e.g., '2024-12-31T23:59:59Z')
+        limit: Maximum number of stories to return (default: 20)
+    
+    Returns:
+        List of Instagram Stories threads with their IDs and preview data.
+    """
+    params = {
+        "interaction_type": "instagram_stories",
+        "limit": limit
+    }
+    
+    if from_date:
+        params["from_date"] = from_date
+    if to_date:
+        params["to_date"] = to_date
+    
+    response = requests.get(
+        f"{API_BASE_URL}/tapestries/{get_tapestry_id()}/threads",
+        headers=get_api_headers(),
+        params=params
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+@mcp.tool()
+def get_thread_image(thread_id: str) -> Image:
+    """
+    Download and return the image associated with a thread.
+    
+    Use this tool to retrieve the actual image content from a thread (e.g., an Instagram Story).
+    First use get_instagram_stories_previews to get thread IDs, then use this tool to fetch the images.
+    
+    Args:
+        thread_id: The ID of the thread to get the image for
+    
+    Returns:
+        The image content that can be displayed by MCP clients.
+    """
+    # Get the signed URL for the asset
+    response = requests.get(
+        f"{API_BASE_URL}/threads/{thread_id}/asset",
+        headers=get_api_headers()
+    )
+    response.raise_for_status()
+    signed_url = response.json().get("url")
+    
+    if not signed_url:
+        raise ValueError(f"No asset URL found for thread {thread_id}")
+    
+    # Download the image from the signed URL
+    image_response = requests.get(signed_url)
+    image_response.raise_for_status()
+    
+    # Determine format from content-type header
+    content_type = image_response.headers.get("content-type", "image/jpeg")
+    if "png" in content_type:
+        fmt = "png"
+    elif "gif" in content_type:
+        fmt = "gif"
+    elif "webp" in content_type:
+        fmt = "webp"
+    else:
+        fmt = "jpeg"
+    
+    return Image(data=image_response.content, format=fmt)
 
 
 if __name__ == "__main__":
