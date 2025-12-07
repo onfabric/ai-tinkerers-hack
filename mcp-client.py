@@ -10,25 +10,17 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
+from dotenv import load_dotenv
 from fastmcp import Client
 
-# Load environment variables from .env file if it exists
-try:
-    from dotenv import load_dotenv
-    # Try root directory first, then mcp-server directory
-    root_env = Path(__file__).parent / ".env"
-    server_env = Path(__file__).parent / "mcp-server" / ".env"
-    if root_env.exists():
-        load_dotenv(root_env)
-    elif server_env.exists():
-        load_dotenv(server_env)
-except ImportError:
-    pass  # python-dotenv is optional
+# Load .env file from the root directory (same directory as this script)
+env_path = Path(__file__).parent / ".env"
+load_dotenv(env_path)
 
 # Configuration
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp")
+AUTH_TOKEN = os.getenv("ONFABRIC_AUTH_TOKEN", "")
 
 
 def print_json(data, indent=2):
@@ -84,6 +76,10 @@ async def call_tool(client: Client, tool_name: str, params: dict):
 
 async def example_usage():
     """Example usage of the OnFabric API MCP client."""
+    if not AUTH_TOKEN:
+        print("Error: ONFABRIC_AUTH_TOKEN environment variable is required", file=sys.stderr)
+        sys.exit(1)
+    
     print(f"Connecting to MCP server at {MCP_SERVER_URL}...\n")
     
     client = Client(MCP_SERVER_URL)
@@ -93,7 +89,9 @@ async def example_usage():
         print("=" * 60)
         print("Example 1: Getting facet types")
         print("=" * 60)
-        types = await call_tool(client, "get_facet_types", {})
+        types = await call_tool(client, "get_facet_types", {
+            "auth_token": AUTH_TOKEN
+        })
         if types:
             print_json(types)
         
@@ -104,6 +102,7 @@ async def example_usage():
         print("Example 2: Getting top topics")
         print("=" * 60)
         top_facets = await call_tool(client, "get_top_facets", {
+            "auth_token": AUTH_TOKEN,
             "facet_type": "topics",
             "top_k": 5
         })
@@ -117,6 +116,7 @@ async def example_usage():
         print("Example 3: Searching for facets")
         print("=" * 60)
         search_results = await call_tool(client, "search_facets", {
+            "auth_token": AUTH_TOKEN,
             "text": "fashion",
             "facet_type": "companies",
             "top_k": 5
@@ -127,6 +127,10 @@ async def example_usage():
 
 async def interactive_mode():
     """Interactive mode for exploring the API."""
+    if not AUTH_TOKEN:
+        print("Error: ONFABRIC_AUTH_TOKEN environment variable is required", file=sys.stderr)
+        sys.exit(1)
+    
     print(f"Connecting to MCP server at {MCP_SERVER_URL}...\n")
     
     client = Client(MCP_SERVER_URL)
@@ -146,7 +150,9 @@ async def interactive_mode():
         
         # Simple example: get facet types
         print("Fetching facet types...")
-        types = await call_tool(client, "get_facet_types", {})
+        types = await call_tool(client, "get_facet_types", {
+            "auth_token": AUTH_TOKEN
+        })
         if types:
             print_json(types)
 
@@ -170,7 +176,8 @@ Examples:
   MCP_SERVER_URL=http://localhost:8001/mcp python mcp-client.py
 
 Environment Variables:
-  MCP_SERVER_URL    - MCP server URL (default: http://localhost:8000/mcp)
+  MCP_SERVER_URL        - MCP server URL (default: http://localhost:8000/mcp)
+  ONFABRIC_AUTH_TOKEN   - Bearer token for OnFabric API authentication (required)
         """
     )
     
