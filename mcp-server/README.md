@@ -106,7 +106,30 @@ fastmcp run main.py:mcp --transport http --port 8000
     - `top_k` (int, optional): Number of neighbour memories to return (default: 10)
   - Returns: Dictionary with neighbour memories
 
-## Connecting with a Client
+## Using the Client
+
+### Using the Provided Client Script
+
+A client script is available at the root of the project (`mcp-client.py`):
+
+```bash
+# Run example usage
+python ../mcp-client.py
+
+# Interactive mode
+python ../mcp-client.py --interactive
+
+# Custom server URL
+MCP_SERVER_URL=http://localhost:8001/mcp python ../mcp-client.py
+```
+
+The client script will:
+- Automatically load configuration from `.env` file
+- Show pretty-printed JSON output
+- Handle errors gracefully
+- Support both example and interactive modes
+
+### Using the Client Programmatically
 
 ```python
 import asyncio
